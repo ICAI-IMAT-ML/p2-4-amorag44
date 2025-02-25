@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.stats as stats
 import seaborn as sns
+import math
 
 
 class LinearRegressor:
@@ -50,29 +51,46 @@ class LinearRegressor:
         elif method == "gradient_descent":
             self.fit_gradient_descent(X_with_bias, y, learning_rate, iterations)
 
+    import numpy as np
+
     def fit_multiple(self, X, y):
         """
-        Fit the model using multiple linear regression (more than one independent variable).
-
-        This method applies the matrix approach to calculate the coefficients for
-        multiple linear regression.
-
+        Fit the model using multiple linear regression (least squares).
+        
         Args:
-            X (np.ndarray): Independent variable data (2D array), with bias.
+            X (np.ndarray): Independent variable data (2D array) with bias.
             y (np.ndarray): Dependent variable data (1D array).
 
         Returns:
             None: Modifies the model's coefficients and intercept in-place.
         """
-        # Replace this code with the code you did in the previous laboratory session
+        # Verificar si hay valores NaN o Inf en los datos
+        if np.isnan(X).any() or np.isnan(y).any():
+            raise ValueError("Error: La matriz de entrada contiene valores NaN.")
+        if np.isinf(X).any() or np.isinf(y).any():
+            raise ValueError("Error: La matriz de entrada contiene valores Inf.")
 
-        # Store the intercept and the coefficients of the model
-        self.intercept = None
-        self.coefficients = None
+        # Verificar si hay columnas constantes en X (que causarían singularidad)
+        for i in range(X.shape[1]):
+            if np.all(X[:, i] == X[0, i]):
+                print(f"Advertencia: La columna {i} es constante y puede causar problemas.")
+
+        # Verificar si la matriz (X^T * X) es mal condicionada (potencialmente singular)
+        cond_number = np.linalg.cond(X.T @ X)
+        if cond_number > 1e10:
+            print("Advertencia: La matriz (X^T * X) es mal condicionada. Usando pseudo-inversa.")
+
+        # Aplicar la ecuación de mínimos cuadrados utilizando la pseudo-inversa para evitar singularidad
+        W = np.linalg.pinv(X.T @ X) @ X.T @ y
+
+        # Asignar valores a los coeficientes
+        self.intercept = W[0]  # Primer coeficiente es la intersección
+        self.coefficients = W[1:]  # Resto son los coeficientes del modelo
+
 
     def fit_gradient_descent(self, X, y, learning_rate=0.01, iterations=1000):
         """
-        Fit the model using either normal equation or gradient descent.
+        Fit the model using gradient descent.
 
         Args:
             X (np.ndarray): Independent variable data (2D array), with bias.
@@ -84,26 +102,32 @@ class LinearRegressor:
             None: Modifies the model's coefficients and intercept in-place.
         """
 
-        # Initialize the parameters to very small values (close to 0)
+        # Número de muestras
         m = len(y)
-        self.coefficients = (
-            np.random.rand(X.shape[1] - 1) * 0.01
-        )  # Small random numbers
-        self.intercept = np.random.rand() * 0.01
 
-        # Implement gradient descent (TODO)
+        # Inicializar los parámetros en valores pequeños cercanos a 0
+        self.coefficients = np.random.rand(X.shape[1] - 1) * 0.01  # Coeficientes
+        self.intercept = np.random.rand() * 0.01  # Término de intersección
+
+        # Gradiente descendente
         for epoch in range(iterations):
-            predictions = None
+            # Predicciones del modelo
+            predictions = X[:, 1:].dot(self.coefficients) + self.intercept
+
+            # Cálculo del error
             error = predictions - y
 
-            # TODO: Write the gradient values and the updates for the paramenters
-            gradient = None
-            self.intercept -= None
-            self.coefficients -= None
+            # Cálculo del gradiente
+            gradient_coeff = (1/m) * X[:, 1:].T.dot(error)  # Gradiente de los coeficientes
+            gradient_intercept = (1/m) * np.sum(error)  # Gradiente de la intersección
 
-            # TODO: Calculate and print the loss every 10 epochs
+            # Actualización de parámetros
+            self.coefficients -= learning_rate * gradient_coeff
+            self.intercept -= learning_rate * gradient_intercept
+
+            # Mostrar el costo cada 1000 iteraciones
             if epoch % 1000 == 0:
-                mse = None
+                mse = (1/(2*m)) * np.sum(error**2)
                 print(f"Epoch {epoch}: MSE = {mse}")
 
     def predict(self, X):
@@ -126,7 +150,22 @@ class LinearRegressor:
         if self.coefficients is None or self.intercept is None:
             raise ValueError("Model is not yet fitted")
 
-        return None
+        if np.ndim(X) == 1:
+            # TODO: Predict when X is only one variable
+            predictions = []
+            for i in range(len(X)):
+                value = self.intercept + self.coefficients*X[i]
+                predictions.append(value)
+        
+        else:
+            # TODO: Predict when X is more than one variable
+            predictions = X @ self.coefficients + self.intercept
+            
+
+        
+        return np.array(predictions)
+
+
 
 
 def evaluate_regression(y_true, y_pred):
@@ -142,19 +181,29 @@ def evaluate_regression(y_true, y_pred):
     """
 
     # R^2 Score
-    # TODO
-    r_squared = None
+    rss = 0
+    tss = 0
+    for i in range(len(y_true)):
+        rss += (y_true[i] - y_pred[i])**2
+        tss += (y_true[i]-np.mean(y_true))**2
+    r_squared = 1 - (rss/tss)
 
     # Root Mean Squared Error
-    # TODO
-    rmse = None
+    rm = 0
+    for i in range(len(y_true)):
+        rm += (y_true[i] - y_pred[i])**2
+    rmse = math.sqrt(rm/len(y_true))
 
     # Mean Absolute Error
-    # TODO
-    mae = None
+    m = 0
+    for i in range(len(y_true)):
+        m += abs(y_true[i] - y_pred[i])
+    mae = m/len(y_true)
 
     return {"R2": r_squared, "RMSE": rmse, "MAE": mae}
 
+
+import numpy as np
 
 def one_hot_encode(X, categorical_indices, drop_first=False):
     """
@@ -170,21 +219,26 @@ def one_hot_encode(X, categorical_indices, drop_first=False):
         np.ndarray: Transformed array with one-hot encoded columns.
     """
     X_transformed = X.copy()
+
     for index in sorted(categorical_indices, reverse=True):
-        # TODO: Extract the categorical column
-        categorical_column = None
+        # Extraer la columna categórica
+        categorical_column = X_transformed[:, index]
 
-        # TODO: Find the unique categories (works with strings)
-        unique_values = None
+        # Encontrar los valores únicos de la columna (maneja strings)
+        unique_values = np.unique(categorical_column)
 
-        # TODO: Create a one-hot encoded matrix (np.array) for the current categorical column
-        one_hot = None
+        # Crear una matriz de codificación one-hot
+        one_hot = np.zeros((X_transformed.shape[0], len(unique_values)))
 
-        # Optionally drop the first level of one-hot encoding
+        for i, value in enumerate(unique_values):
+            one_hot[:, i] = (categorical_column == value).astype(int)
+
+        # Opción para eliminar la primera categoría y evitar multicolinealidad
         if drop_first:
             one_hot = one_hot[:, 1:]
 
-        # TODO: Delete the original categorical column from X_transformed and insert new one-hot encoded columns
-        X_transformed = None
+        # Eliminar la columna original e insertar las nuevas columnas codificadas
+        X_transformed = np.delete(X_transformed, index, axis=1)  # Eliminar la columna original
+        X_transformed = np.hstack((X_transformed[:, :index], one_hot, X_transformed[:, index:]))  # Insertar nuevas columnas
 
     return X_transformed
